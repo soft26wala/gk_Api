@@ -25,6 +25,12 @@ const checkDB = (req, res, next) => {
   next();
 };
 
+// Validate numeric id parameters
+const validateId = (id) => {
+  const parsed = Number(id);
+  return Number.isInteger(parsed) && parsed > 0;
+};
+
 // Apply checkDB middleware to all routes
 router.use(checkDB);
 
@@ -233,8 +239,13 @@ router.get("/all", async (req, res) => {
 // GET Single User
 // ==============================
 router.get("/:id", async (req, res) => {
+  if (!validateId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user id" });
+  }
+
   try {
-    const result = await db.query("SELECT * FROM users WHERE id=$1", [req.params.id]);
+    const userId = parseInt(req.params.id, 10);
+    const result = await db.query("SELECT * FROM users WHERE id=$1", [userId]);
     res.json(result.rows[0] || {});
   } catch (err) {
     res.status(500).send(err);
@@ -249,20 +260,25 @@ router.put("/:id", upload.single("photo"), async (req, res) => {
     const { name, phone, age, email, gender } = req.body;
     const photo = req.file ? req.file.filename : null;
 
+    if (!validateId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+
+    const userId = parseInt(req.params.id, 10);
     if (photo) {
       const sql = `
         UPDATE users
         SET name=$1, phone=$2, age=$3, email=$4, gender=$5, photo=$6
         WHERE id=$7
       `;
-      await db.query(sql, [name, phone, age, email, gender, photo, req.params.id]);
+      await db.query(sql, [name, phone, age, email, gender, photo, userId]);
     } else {
       const sql = `
         UPDATE users
         SET name=$1, phone=$2, age=$3, email=$4, gender=$5
         WHERE id=$6
       `;
-      await db.query(sql, [name, phone, age, email, gender, req.params.id]);
+      await db.query(sql, [name, phone, age, email, gender, userId]);
     }
 
     res.json({
@@ -279,8 +295,13 @@ router.put("/:id", upload.single("photo"), async (req, res) => {
 // DELETE User
 // ==============================
 router.delete("/:id", async (req, res) => {
+  if (!validateId(req.params.id)) {
+    return res.status(400).json({ error: "Invalid user id" });
+  }
+
   try {
-    await db.query("DELETE FROM users WHERE id=$1", [req.params.id]);
+    const userId = parseInt(req.params.id, 10);
+    await db.query("DELETE FROM users WHERE id=$1", [userId]);
     res.json({ message: "User deleted" });
   } catch (err) {
     res.status(500).send(err);

@@ -12,18 +12,30 @@ configDotenv();
 const app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// app.use(
+//   cors({
+//     origin: [
+//       process.env.clientUrl,
+//       "http://127.0.0.1:5500",
+//       "http://127.0.0.1:5501",
+//       "http://127.0.0.1:3000",
+//     ],
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//     credentials: true,
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//   }),
+// );
+
+
 app.use(
-  cors({
-    origin: [
-      process.env.clientUrl,
-      "http://127.0.0.1:5500",
-      "http://127.0.0.1:5501",
-      "http://127.0.0.1:3000",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
+  helmet.contentSecurityPolicy({
+    directives: {
+      connectSrc: [
+        "'self'",
+        "https://gk-api-t0fo.onrender.com"
+      ]
+    }
+  })
 );
 app.use("/uploads", express.static("uploads"));
 
