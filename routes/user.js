@@ -59,7 +59,7 @@ router.post("/social-login", async (req, res) => {
       // Agar naya user hai (Social Signup), toh insert karein
       // Password yahan NULL jayega
       const result = await db.query(
-        "INSERT INTO users (name, email, photo, provider, password) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email",
+        "INSERT INTO users (name, email, photo, provider, password) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role",
         [name, email, photo, provider, null] 
       );
       user = result.rows[0];
@@ -73,72 +73,147 @@ router.post("/social-login", async (req, res) => {
 });
 
 
+router.get("/users", async (req, res) => {
+    try {
+        // Maan lete hain aapki table ka naam 'users' hai
+        const allUsers = await db.query("SELECT id, name, email, created_at FROM users ORDER BY created_at DESC");
+        res.json(allUsers.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Users fetch nahi ho paye" });
+    }
+});
+
 
 // POST: /api/auth/signup-manual
-router.post("/signup-manual", upload.single("photo"), async (req, res) => {
+router.post("/signup-manual", async (req, res) => {
+  console.log("req aa rahi hai ");
+  
   try {
     const { name, email, password } = req.body;
 
-    // Validate required fields
+    // Validation
     if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email, and password are required" });
-    }
-
-    // 1. Check if user already exists
-    const userExist = await db.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (userExist.rows.length > 0) return res.status(400).json({ message: "User already exists" });
-
-    // 2. Cloudinary Upload Logic (only if file is provided)
-    let imageUrl = null;
-
-    if (req.file) {
-      // --- 🚀 Cloudinary अपलोड लॉजिक यहाँ शुरू होता है 🚀 ---
-      // Multer is currently using diskStorage in this file. When files are stored
-      // on disk, `req.file.buffer` will be undefined. In that case, read the
-      // file from disk and convert to base64 before uploading to Cloudinary.
-      let fileBuffer;
-      if (req.file.buffer) {
-        fileBuffer = req.file.buffer;
-      } else if (req.file.path) {
-        fileBuffer = fs.readFileSync(req.file.path);
-      } else {
-        throw new Error('Uploaded file has no buffer or path');
-      }
-
-      // Convert to base64 data URI
-      const b64 = fileBuffer.toString("base64");
-      const dataURI = "data:" + (req.file.mimetype || 'application/octet-stream') + ";base64," + b64;
-
-      // Upload to Cloudinary
-      const resultimg = await cloudinary.uploader.upload(dataURI, {
-          folder: "photo",
-          resource_type: "auto"
+      return res.status(400).json({
+        message: "Name, email and password required",
       });
-
-      // Get secure URL
-      imageUrl = resultimg.secure_url;
     }
 
-    // 3. Hash Password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // 4. Save to Database (Ab hum filename ki jagah photoUrl save kar rahe hain)
-    const result = await db.query(
-      "INSERT INTO users (name, email, photo, password, provider) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, photo",
-      [name, email, imageUrl, hashedPassword, "manual"]
+    // Check existing user
+    const userExist = await db.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
     );
 
-    const token = jwt.sign({ id: result.rows[0].id }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    
-    res.status(201).json({ 
-      message: "Manual Signup Success", 
-      token, 
-      user: result.rows[0] 
+    if (userExist.rows.length > 0) {
+      return res.status(400).json({
+        message: "User already exists",
+      });
+    }
+
+    // Hash Password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert User
+    const result = await db.query(
+      `INSERT INTO users 
+      (name, email, password, provider) 
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, name, email, role`,
+      [name, email, hashedPassword, "manual"]
+    );
+
+    // JWT Token
+    const token = jwt.sign(
+      { id: result.rows[0].id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.status(201).json({
+      message: "Signup Success",
+      token,
+      user: result.rows[0],
     });
 
   } catch (err) {
-    console.error("Cloudinary/DB Error:", err);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
+
+
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validation
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password required",
+      });
+    }
+
+    // Find User
+    const result = await db.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(400).json({
+        message: "User not found",
+      });
+    }
+
+    // Compare Password
+    const isMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid password",
+      });
+    }
+
+    // JWT Token
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role || "user",
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    // Success
+    res.status(200).json({
+      message: "Login Success",
+      token,
+      role: user.role || "user",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      message: "Server Error",
+    });
   }
 });
 

@@ -104,14 +104,14 @@ export async function connectDB() {
 
     const files = [
       "user.sql",                // Create users first (no dependencies)
-      "courses_offered.sql",     // Create courses (no dependencies)
-      "buy_course.sql",          // Then create buy_course
-      "callback.sql",            // Independent
-      "student.sql",             // Independent
-      "event.sql",               // Independent
-      "payments.sql",            // After other tables are created       // Independent
-      "clients.sql",             // Independent
-      "builder.sql",             // Independent
+      "templates.sql",           // Create templates (no dependencies)
+      // "buy_course.sql",          // Then create buy_course
+      // "callback.sql",            // Independent
+      // "student.sql",             // Independent
+      // "event.sql",               // Independent
+      // "payments.sql",            // After other tables are created       // Independent
+      // "clients.sql",             // Independent
+      // "builder.sql",             // Independent
     ];
 
     for (const file of files) {
